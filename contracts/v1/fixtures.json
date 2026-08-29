@@ -1,0 +1,108 @@
+{
+  "version": "v1",
+  "cases": {
+    "account.resolve.success": {
+      "request": {
+        "external": {
+          "provider": "workos",
+          "provider_subject": "user_fixture_123",
+          "claims": {
+            "email": "fixture@example.test",
+            "email_verified": true,
+            "name": "Fixture Person"
+          },
+          "provenance": {
+            "issuer": "https://api.workos.com/",
+            "audience": "client_fixture",
+            "asserted_at": "2026-08-29T12:00:00Z",
+            "assertion_id": "assertion_fixture"
+          },
+          "authenticated_at": "2026-08-29T12:00:00Z"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "account": {
+            "id": "acc_fixture",
+            "status": "active",
+            "created": true
+          }
+        }
+      }
+    },
+    "entitlement.allow": {
+      "request": {
+        "account_id": "acc_fixture",
+        "product": "logres",
+        "entitlement": "access"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "allowed": true,
+          "account_id": "acc_fixture",
+          "account_status": "active",
+          "product": "logres",
+          "entitlement": "access",
+          "evaluated_at": "2026-08-29T12:00:00+00:00",
+          "grant_id": "01FIXTUREGRANT"
+        }
+      }
+    },
+    "entitlement.deny": {
+      "request": {
+        "account_id": "acc_fixture",
+        "product": "logres",
+        "entitlement": "access"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "allowed": false,
+          "account_id": "acc_fixture",
+          "account_status": "suspended",
+          "product": "logres",
+          "entitlement": "access",
+          "evaluated_at": "2026-08-29T12:00:00+00:00",
+          "grant_id": null
+        }
+      }
+    },
+    "error.validation": {
+      "response": {
+        "status": 422,
+        "body": {
+          "message": "The external.provider field is required.",
+          "errors": {
+            "external.provider": ["The external.provider field is required."]
+          }
+        }
+      }
+    },
+    "error.authentication": {
+      "response": {
+        "status": 401,
+        "body": {
+          "message": "Unauthenticated."
+        }
+      }
+    },
+    "error.not_found": {
+      "response": {
+        "status": 404,
+        "body": {
+          "message": "Not Found"
+        }
+      }
+    },
+    "error.collision": {
+      "response": {
+        "status": 409,
+        "body": {
+          "message": "Identity resolution failed."
+        }
+      }
+    }
+  }
+}

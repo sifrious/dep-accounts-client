@@ -24,9 +24,11 @@
     },
     "scripts": {
         "analyse": "phpstan analyse --no-progress",
+        "contracts": "php bin/verify-zahir-contracts",
         "check": [
             "@test",
-            "@analyse"
+            "@analyse",
+            "@contracts"
         ],
         "test": "phpunit"
     },
