@@ -52,14 +52,14 @@ class AccountsClientTest extends TestCase
                 'account_id' => 'acc_01test',
                 'account_status' => 'active',
                 'product' => 'logres',
-                'entitlement' => 'logres.access',
+                'entitlement' => 'access',
                 'evaluated_at' => '2026-08-27T12:00:00Z',
                 'grant_id' => '01GRANT',
             ]),
         ]);
 
         $client = new AccountsClient($http, 'https://accounts.example', 'service-token');
-        $decision = $client->entitlement('acc_01test', 'logres', 'logres.access');
+        $decision = $client->entitlement('acc_01test', 'logres', 'access');
 
         $this->assertTrue($decision->allowed);
         $this->assertSame('active', $decision->accountStatus);
