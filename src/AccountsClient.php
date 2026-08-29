@@ -6,7 +6,7 @@ use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Response;
 use Sifrious\AccountsClient\Data\AccountReference;
 use Sifrious\AccountsClient\Data\EntitlementDecision;
-use Sifrious\AccountsClient\Data\ExternalIdentity;
+use Sifrious\AccountsClient\Data\VerifiedExternal;
 use UnexpectedValueException;
 
 final readonly class AccountsClient
@@ -17,22 +17,27 @@ final readonly class AccountsClient
         private string $serviceToken,
     ) {}
 
-    public function resolve(ExternalIdentity $identity): AccountReference
+    public function resolve(VerifiedExternal $identity): AccountReference
     {
         $response = $this->http
             ->baseUrl($this->baseUrl)
             ->withToken($this->serviceToken)
             ->acceptJson()
             ->post('/api/v1/accounts/resolve', [
-                'issuer' => $identity->issuer,
-                'subject' => $identity->subject,
-                'display_name' => $identity->displayName,
+                'external' => [
+                    'provider' => $identity->provider,
+                    'provider_subject' => $identity->providerSubject,
+                    'claims' => $identity->claims,
+                    'provenance' => $identity->provenance,
+                    'authenticated_at' => $identity->authenticatedAt,
+                ],
             ])
             ->throw();
 
         return new AccountReference(
             id: $this->string($response, 'account.id'),
             status: $this->string($response, 'account.status'),
+            created: $this->boolean($response, 'account.created'),
         );
     }
 
@@ -52,6 +57,7 @@ final readonly class AccountsClient
         return new EntitlementDecision(
             allowed: $this->boolean($response, 'allowed'),
             accountId: $this->string($response, 'account_id'),
+            accountStatus: $this->string($response, 'account_status'),
             product: $this->string($response, 'product'),
             entitlement: $this->string($response, 'entitlement'),
             evaluatedAt: $this->string($response, 'evaluated_at'),

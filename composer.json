@@ -1,7 +1,7 @@
 {
     "name": "sifrious/accounts-client",
     "version": "dev-main",
-    "description": "Reusable login and API client contracts for the Accounts service",
+    "description": "Provider-neutral login and API client contracts for Zahir",
     "type": "library",
     "license": "proprietary",
     "require": {

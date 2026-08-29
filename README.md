@@ -1,27 +1,21 @@
-# Accounts client
+# Zahir client
 
-The Accounts client is the reusable integration boundary between product applications and the Accounts service.
+This package is the reusable product-side boundary for Zahir.
 
 It provides:
 
-- a provider-independent login driver contract;
-- a login coordinator that resolves verified identities into stable Accounts accounts;
+- a provider-neutral login-driver contract;
+- a `VerifiedExternal` value containing only allowlisted claims and assertion provenance;
 - authenticated HTTP calls for account resolution and entitlement decisions;
-- small immutable response values that do not expose provider-specific objects.
+- immutable responses with no ORM or provider-specific objects.
 
-Applications still own their local session and product-specific account projection. The package never stores credentials and never connects directly to the Accounts database.
+Products still own OAuth/OIDC transport, state, nonce, PKCE, callback allowlists, replay protection, product sessions, local user projections, and authorization. The package never stores credentials or connects to Zahir's database.
 
-## Installation
-
-```bash
-composer require sifrious/accounts-client
-```
+The first identity-provider adapter will implement WorkOS AuthKit behind `LoginDriver`; WorkOS types must not cross that interface.
 
 ## Verification
 
 ```bash
 composer install
-composer test
+composer check
 ```
-
-The concrete login driver and service credential are configured by each application after the identity and service-authentication decisions are accepted.

@@ -21,6 +21,6 @@ final readonly class LoginManager
 
     public function complete(Request $request): AccountReference
     {
-        return $this->accounts->resolve($this->driver->identityFromCallback($request));
+        return $this->accounts->resolve($this->driver->verifiedExternalFromCallback($request));
     }
 }
