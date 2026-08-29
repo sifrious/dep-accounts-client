@@ -20,3 +20,5 @@ jobs:
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: composer check
       - run: composer audit --locked --no-interaction
+      - name: Scan Git history for secrets
+        run: go run github.com/gitleaks/gitleaks/v8@v8.28.0 git --redact --no-banner
