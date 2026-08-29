@@ -1,6 +1,5 @@
 {
     "name": "sifrious/accounts-client",
-    "version": "dev-main",
     "description": "Provider-neutral login and API client contracts for Zahir",
     "type": "library",
     "license": "proprietary",
