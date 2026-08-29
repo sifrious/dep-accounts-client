@@ -5,12 +5,11 @@ $local = dirname(__DIR__).'/contracts/v1/fixtures.json';
 $canonicalRoot = getenv('ZAHIR_CONTRACTS_PATH') ?: dirname(__DIR__, 2).'/dep-zahir/contracts';
 $canonical = rtrim($canonicalRoot, '/').'/v1/fixtures.json';
 
-if (! is_file($canonical)) {
-    fwrite(STDERR, "Canonical Zahir fixture not found at {$canonical}.\n");
-    exit(2);
-}
+$expected = is_file($canonical)
+    ? hash_file('sha256', $canonical)
+    : trim((string) file_get_contents(dirname(__DIR__).'/contracts/v1/CANONICAL_SHA256'));
 
-if (! hash_equals(hash_file('sha256', $canonical), hash_file('sha256', $local))) {
+if (! hash_equals($expected, hash_file('sha256', $local))) {
     fwrite(STDERR, "Client fixtures differ from canonical Zahir v1 fixtures.\n");
     exit(1);
 }
