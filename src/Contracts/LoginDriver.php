@@ -11,4 +11,6 @@ interface LoginDriver
     public function redirect(Request $request): RedirectResponse;
 
     public function verifiedExternalFromCallback(Request $request): VerifiedExternal;
+
+    public function logout(Request $request, string $postLogoutRedirect): RedirectResponse;
 }
