@@ -129,6 +129,44 @@ final class WorkOsAuthKitDriverTest extends TestCase
         $driver->logout($this->request([], $session), self::LOGOUT.'/extra');
     }
 
+    public function test_unknown_signing_key_refreshes_jwks_once(): void
+    {
+        [$oldPrivateKey, $oldJwk] = $this->keyPair('old-key');
+        [$newPrivateKey, $newJwk] = $this->keyPair('new-key');
+        $http = new Factory;
+        $driver = $this->driver($http);
+        $session = $this->session();
+        $tokens = [];
+
+        $http->fake([
+            'https://api.workos.test/authenticate' => function () use (&$tokens, $http) {
+                return $http->response(['access_token' => array_shift($tokens)]);
+            },
+            'https://api.workos.test/jwks' => $http->sequence()
+                ->push(['keys' => [$oldJwk]])
+                ->push(['keys' => [$newJwk]]),
+        ]);
+
+        foreach ([['old-key', $oldPrivateKey], ['new-key', $newPrivateKey]] as [$keyId, $privateKey]) {
+            $authorization = $driver->redirect($this->request(['redirect_uri' => self::CALLBACK], $session));
+            parse_str((string) parse_url($authorization->getTargetUrl(), PHP_URL_QUERY), $parameters);
+            $tokens[] = JWT::encode([
+                'iss' => 'https://api.workos.test/',
+                'aud' => 'client_test',
+                'sub' => 'user_123',
+                'nonce' => $this->parameter($parameters, 'nonce'),
+                'iat' => self::NOW - 5,
+                'nbf' => self::NOW - 5,
+                'exp' => self::NOW + 300,
+            ], $privateKey, 'RS256', $keyId);
+            $verified = $driver->verifiedExternalFromCallback($this->request([
+                'state' => $this->parameter($parameters, 'state'),
+                'code' => 'code',
+            ], $session));
+            self::assertSame('user_123', $verified->providerSubject);
+        }
+    }
+
     private function assertTokenFailure(string $failure): void
     {
         [$privateKey, $jwk] = $this->keyPair();
@@ -193,7 +231,7 @@ final class WorkOsAuthKitDriverTest extends TestCase
     }
 
     /** @return array{string, array<string, string>} */
-    private function keyPair(): array
+    private function keyPair(string $keyId = 'test-key'): array
     {
         $resource = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
         self::assertNotFalse($resource);
@@ -208,7 +246,7 @@ final class WorkOsAuthKitDriverTest extends TestCase
 
         return [$privateKey, [
             'kty' => 'RSA',
-            'kid' => 'test-key',
+            'kid' => $keyId,
             'use' => 'sig',
             'alg' => 'RS256',
             'n' => $this->base64Url($details['rsa']['n']),

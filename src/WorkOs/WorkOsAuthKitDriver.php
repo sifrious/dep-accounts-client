@@ -175,15 +175,27 @@ final class WorkOsAuthKitDriver implements LoginDriver
     /** @return array<string, mixed> */
     private function verifiedClaims(string $token): array
     {
+        $decoded = null;
         try {
             JWT::$leeway = $this->config->clockToleranceSeconds;
             JWT::$timestamp = $this->now();
-            $decoded = get_object_vars(JWT::decode($token, JWK::parseKeySet($this->jwks())));
-        } catch (Throwable $exception) {
-            throw new LoginVerificationFailed('Token signature or time claims are invalid.', previous: $exception);
+            foreach ([false, true] as $refresh) {
+                try {
+                    $decoded = get_object_vars(JWT::decode($token, JWK::parseKeySet($this->jwks($refresh))));
+                    break;
+                } catch (Throwable $exception) {
+                    if ($refresh) {
+                        throw new LoginVerificationFailed('Token signature or time claims are invalid.', previous: $exception);
+                    }
+                }
+            }
         } finally {
             JWT::$timestamp = null;
             JWT::$leeway = 0;
+        }
+
+        if ($decoded === null) {
+            throw new LoginVerificationFailed('Token signature or time claims are invalid.');
         }
 
         if (($decoded['iss'] ?? null) !== $this->config->issuer) {
@@ -203,9 +215,9 @@ final class WorkOsAuthKitDriver implements LoginDriver
     }
 
     /** @return array<string, mixed> */
-    private function jwks(): array
+    private function jwks(bool $refresh = false): array
     {
-        if ($this->jwks !== null) {
+        if (! $refresh && $this->jwks !== null) {
             return $this->jwks;
         }
 
