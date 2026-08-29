@@ -13,6 +13,8 @@ Products own routes, product sessions, local user projections, onboarding, and a
 
 The WorkOS AuthKit driver is behind `LoginDriver`; WorkOS tokens, sessions, users, and SDK types never cross that interface. It uses authorization code + PKCE, single-use state, nonce and time validation, locally verified JWKS signatures, exact callback/logout allowlists, and produces only `VerifiedExternal`.
 
+The client also exposes provider-neutral identity link/unlink and account suspend/reactivate calls. These operations use opaque account IDs and service contracts only; consumers never receive database models or storage identifiers.
+
 Construct `WorkOsAuthKitConfig` from deployment secrets and exact URLs, inject Laravel's HTTP factory, then give the resulting `WorkOsAuthKitDriver` to `LoginManager`. Initiation expects the selected exact callback URL in the request's `redirect_uri` query value. Live credentials are only needed for a deployment smoke test; normal tests are deterministic and make no WorkOS calls.
 
 ## Verification
