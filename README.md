@@ -35,6 +35,7 @@ is no ordering a consumer can get wrong.
 - [Who owns what](docs/ownership.md)
 - [The consumer contract](docs/consumer-contract.md)
 - [Adopting shared login in an existing Laravel application](docs/adoption-checklist.md)
+- [The authentication release gate](docs/authentication-conformance.md)
 
 ## Verification
 

@@ -16,7 +16,8 @@
     },
     "autoload": {
         "psr-4": {
-            "Sifrious\\AccountsClient\\": "src/"
+            "Sifrious\\AccountsClient\\": "src/",
+            "Sifrious\\AccountsClient\\Testing\\": "testing/"
         }
     },
     "autoload-dev": {
@@ -26,12 +27,13 @@
     },
     "scripts": {
         "analyse": "phpstan analyse --no-progress --memory-limit=512M",
-        "contracts": "php bin/verify-zahir-contracts",
         "check": [
             "@test",
             "@analyse",
             "@contracts"
         ],
+        "conformance": "phpunit --filter AuthenticationConformance",
+        "contracts": "php bin/verify-zahir-contracts",
         "test": "phpunit"
     },
     "config": {
