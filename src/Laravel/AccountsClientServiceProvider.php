@@ -44,12 +44,15 @@ final class AccountsClientServiceProvider extends ServiceProvider
             ),
         ));
 
-        $this->app->singleton(LoginManager::class, fn (): LoginManager => new LoginManager(
+        // Bound transiently, not shared: both are trivially cheap immutable
+        // objects, and a consumer swapping LoginDriver in a test must always be
+        // honoured rather than losing to an already-resolved instance.
+        $this->app->bind(LoginManager::class, fn (): LoginManager => new LoginManager(
             $this->app->make(LoginDriver::class),
             $this->app->make(AccountsClient::class),
         ));
 
-        $this->app->singleton(ProductAuthenticator::class, fn (): ProductAuthenticator => new ProductAuthenticator(
+        $this->app->bind(ProductAuthenticator::class, fn (): ProductAuthenticator => new ProductAuthenticator(
             $this->app->make(LoginDriver::class),
             $this->app->make(AccountsClient::class),
             $this->requiredString('zahir.product'),
