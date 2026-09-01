@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Sifrious\AccountsClient\Contracts\LoginDriver;
 use Sifrious\AccountsClient\Data\VerifiedExternal;
 use Sifrious\AccountsClient\Exceptions\LoginVerificationFailed;
+use Sifrious\AccountsClient\Outcome\AuthenticationOutcome;
 use Throwable;
 
 final class WorkOsAuthKitDriver implements LoginDriver
@@ -60,13 +61,27 @@ final class WorkOsAuthKitDriver implements LoginDriver
     {
         $transaction = $request->session()->pull(self::TRANSACTION_KEY);
         if (! is_array($transaction)) {
-            throw new LoginVerificationFailed('Login transaction is missing or already consumed.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::ReplayRejected, 'Login transaction is missing or already consumed.');
+        }
+
+        // The provider answers a refusal in the same redirect it would answer a
+        // grant. Reading it here — after the single-use transaction is spent —
+        // keeps a replayed cancellation from resurrecting a live transaction,
+        // and keeps "they said no" from being reported as a malformed callback.
+        $providerError = $request->query('error');
+        if (is_string($providerError) && $providerError !== '') {
+            throw LoginVerificationFailed::withOutcome(
+                $providerError === 'access_denied'
+                    ? AuthenticationOutcome::Canceled
+                    : AuthenticationOutcome::ProviderFailure,
+                'The provider declined the authorization request.',
+            );
         }
 
         $state = $request->query('state');
         $code = $request->query('code');
         if (! is_string($state) || ! is_string($code) || $code === '') {
-            throw new LoginVerificationFailed('Authorization callback is incomplete.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Authorization callback is incomplete.');
         }
 
         $expiresAt = $transaction['expires_at'] ?? null;
@@ -76,15 +91,15 @@ final class WorkOsAuthKitDriver implements LoginDriver
         $callbackUrl = $transaction['callback_url'] ?? null;
         if (! is_int($expiresAt) || ! is_string($stateHash) || ! is_string($nonceHash)
             || ! is_string($verifier) || ! is_string($callbackUrl)) {
-            throw new LoginVerificationFailed('Login transaction is invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Login transaction is invalid.');
         }
 
         if ($expiresAt < $this->now()) {
-            throw new LoginVerificationFailed('Login transaction has expired.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackExpired, 'Login transaction has expired.');
         }
 
         if (! hash_equals($stateHash, hash('sha256', $state))) {
-            throw new LoginVerificationFailed('Authorization state is invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Authorization state is invalid.');
         }
 
         $this->exactAllowlistedUrl($callbackUrl, $this->config->callbackUrls, 'callback');
@@ -99,27 +114,27 @@ final class WorkOsAuthKitDriver implements LoginDriver
                 'code_verifier' => $verifier,
             ])->throw()->json();
         } catch (Throwable $exception) {
-            throw new LoginVerificationFailed('Authorization code exchange failed.', previous: $exception);
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::ProviderFailure, 'Authorization code exchange failed.', $exception);
         }
 
         if (! is_array($response) || ! is_string($response['access_token'] ?? null)) {
-            throw new LoginVerificationFailed('Authorization response did not contain a token.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::ProviderFailure, 'Authorization response did not contain a token.');
         }
 
         $claims = $this->verifiedClaims($response['access_token']);
         $nonce = $claims['nonce'] ?? null;
         if (! is_string($nonce) || ! hash_equals($nonceHash, hash('sha256', $nonce))) {
-            throw new LoginVerificationFailed('Authorization nonce is invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Authorization nonce is invalid.');
         }
 
         $subject = $claims['sub'] ?? null;
         if (! is_string($subject) || $subject === '') {
-            throw new LoginVerificationFailed('Verified token has no subject.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Verified token has no subject.');
         }
 
         $user = $response['user'] ?? null;
         if (is_array($user) && isset($user['id']) && $user['id'] !== $subject) {
-            throw new LoginVerificationFailed('Token and user subjects do not match.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Token and user subjects do not match.');
         }
 
         if (is_string($claims['sid'] ?? null)) {
@@ -140,7 +155,7 @@ final class WorkOsAuthKitDriver implements LoginDriver
         $issuedAt = $claims['iat'];
         $authenticatedAt = $claims['auth_time'] ?? $issuedAt;
         if (! is_string($issuer) || ! is_int($issuedAt) || ! is_int($authenticatedAt)) {
-            throw new LoginVerificationFailed('Verified token is missing required provenance.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Verified token is missing required provenance.');
         }
 
         return new VerifiedExternal(
@@ -185,7 +200,7 @@ final class WorkOsAuthKitDriver implements LoginDriver
                     break;
                 } catch (Throwable $exception) {
                     if ($refresh) {
-                        throw new LoginVerificationFailed('Token signature or time claims are invalid.', previous: $exception);
+                        throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Token signature or time claims are invalid.', $exception);
                     }
                 }
             }
@@ -195,20 +210,20 @@ final class WorkOsAuthKitDriver implements LoginDriver
         }
 
         if ($decoded === null) {
-            throw new LoginVerificationFailed('Token signature or time claims are invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Token signature or time claims are invalid.');
         }
 
         if (($decoded['iss'] ?? null) !== $this->config->issuer) {
-            throw new LoginVerificationFailed('Token issuer is invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Token issuer is invalid.');
         }
 
         $audience = $decoded['aud'] ?? null;
         if ($audience !== $this->config->clientId && (! is_array($audience) || ! in_array($this->config->clientId, $audience, true))) {
-            throw new LoginVerificationFailed('Token audience is invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Token audience is invalid.');
         }
 
         if (! is_int($decoded['iat'] ?? null) || $decoded['iat'] > $this->now() + $this->config->clockToleranceSeconds) {
-            throw new LoginVerificationFailed('Token issued-at time is invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, 'Token issued-at time is invalid.');
         }
 
         return $this->stringKeyed($decoded);
@@ -224,11 +239,11 @@ final class WorkOsAuthKitDriver implements LoginDriver
         try {
             $json = $this->http->get($this->config->resolvedJwksEndpoint())->throw()->json();
         } catch (Throwable $exception) {
-            throw new LoginVerificationFailed('Unable to load signing keys.', previous: $exception);
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::ProviderFailure, 'Unable to load signing keys.', $exception);
         }
 
         if (! is_array($json) || ! is_array($json['keys'] ?? null)) {
-            throw new LoginVerificationFailed('Signing key response is invalid.');
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::ProviderFailure, 'Signing key response is invalid.');
         }
 
         return $this->jwks = $this->stringKeyed($json);
@@ -238,7 +253,7 @@ final class WorkOsAuthKitDriver implements LoginDriver
     private function exactAllowlistedUrl(mixed $url, array $allowlist, string $kind): string
     {
         if (! is_string($url) || ! in_array($url, $allowlist, true)) {
-            throw new LoginVerificationFailed("The {$kind} URL is not allowlisted.");
+            throw LoginVerificationFailed::withOutcome(AuthenticationOutcome::CallbackInvalid, "The {$kind} URL is not allowlisted.");
         }
 
         return $url;

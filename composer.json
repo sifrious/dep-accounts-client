@@ -4,9 +4,11 @@
     "type": "library",
     "license": "proprietary",
     "require": {
-        "php": "^8.3",
         "firebase/php-jwt": "^7.1",
-        "illuminate/http": "^13.0"
+        "illuminate/contracts": "^13.0",
+        "illuminate/http": "^13.0",
+        "illuminate/support": "^13.0",
+        "php": "^8.3"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.2",
@@ -23,7 +25,7 @@
         }
     },
     "scripts": {
-        "analyse": "phpstan analyse --no-progress",
+        "analyse": "phpstan analyse --no-progress --memory-limit=512M",
         "contracts": "php bin/verify-zahir-contracts",
         "check": [
             "@test",
@@ -36,5 +38,12 @@
         "sort-packages": true
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Sifrious\\AccountsClient\\Laravel\\AccountsClientServiceProvider"
+            ]
+        }
+    }
 }

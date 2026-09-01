@@ -21,6 +21,21 @@ The client also exposes provider-neutral identity link/unlink and account suspen
 
 Construct `WorkOsAuthKitConfig` from deployment secrets and exact URLs, inject Laravel's HTTP factory, then give the resulting `WorkOsAuthKitDriver` to `LoginManager`. Initiation expects the selected exact callback URL in the request's `redirect_uri` query value. Live credentials are only needed for a deployment smoke test; normal tests are deterministic and make no WorkOS calls.
 
+## The consumer seam
+
+`ProductAuthenticator` is the whole public entry point. `complete()` returns a
+`LoginResult` carrying one of eleven stable `AuthenticationOutcome` codes and
+never throws, because a cancelled login and a suspended account are states a
+product must render rather than exceptions.
+
+The entitlement check lives inside `complete()`, so a product cannot receive an
+authenticated result without an allowed decision for its own product key. There
+is no ordering a consumer can get wrong.
+
+- [Who owns what](docs/ownership.md)
+- [The consumer contract](docs/consumer-contract.md)
+- [Adopting shared login in an existing Laravel application](docs/adoption-checklist.md)
+
 ## Verification
 
 ```bash

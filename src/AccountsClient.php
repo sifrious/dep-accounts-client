@@ -2,14 +2,25 @@
 
 namespace Sifrious\AccountsClient;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Sifrious\AccountsClient\Data\AccountReference;
 use Sifrious\AccountsClient\Data\EntitlementDecision;
 use Sifrious\AccountsClient\Data\IdentityUnlinkResult;
 use Sifrious\AccountsClient\Data\VerifiedExternal;
+use Sifrious\AccountsClient\Exceptions\ZahirRejected;
+use Sifrious\AccountsClient\Exceptions\ZahirUnavailable;
 use UnexpectedValueException;
 
+/**
+ * The only route to Zahir.
+ *
+ * Every call is authenticated with the product's own service credential and
+ * returns immutable values. No ORM model, storage handle, or provider object
+ * crosses this boundary in either direction.
+ */
 final readonly class AccountsClient
 {
     public function __construct(
@@ -20,20 +31,8 @@ final readonly class AccountsClient
 
     public function resolve(VerifiedExternal $identity): AccountReference
     {
-        $response = $this->http
-            ->baseUrl($this->baseUrl)
-            ->withToken($this->serviceToken)
-            ->acceptJson()
-            ->post('/api/v1/accounts/resolve', [
-                'external' => [
-                    'provider' => $identity->provider,
-                    'provider_subject' => $identity->providerSubject,
-                    'claims' => $identity->claims,
-                    'provenance' => $identity->provenance,
-                    'authenticated_at' => $identity->authenticatedAt,
-                ],
-            ])
-            ->throw();
+        $response = $this->send(fn (PendingRequest $request): Response => $request
+            ->post('/api/v1/accounts/resolve', ['external' => $this->external($identity)]));
 
         return new AccountReference(
             id: $this->string($response, 'account.id'),
@@ -44,16 +43,12 @@ final readonly class AccountsClient
 
     public function entitlement(string $accountId, string $product, string $entitlement): EntitlementDecision
     {
-        $response = $this->http
-            ->baseUrl($this->baseUrl)
-            ->withToken($this->serviceToken)
-            ->acceptJson()
+        $response = $this->send(fn (PendingRequest $request): Response => $request
             ->post('/api/v1/entitlements/decide', [
                 'account_id' => $accountId,
                 'product' => $product,
                 'entitlement' => $entitlement,
-            ])
-            ->throw();
+            ]));
 
         return new EntitlementDecision(
             allowed: $this->boolean($response, 'allowed'),
@@ -68,11 +63,11 @@ final readonly class AccountsClient
 
     public function linkIdentity(string $currentAccountId, VerifiedExternal $identity): AccountReference
     {
-        $response = $this->request()
+        $response = $this->send(fn (PendingRequest $request): Response => $request
             ->withHeader('X-Zahir-Current-Account', $currentAccountId)
             ->post("/api/v1/accounts/{$currentAccountId}/identities/link", [
                 'external' => $this->external($identity),
-            ])->throw();
+            ]));
 
         return new AccountReference(
             id: $this->string($response, 'account.id'),
@@ -92,10 +87,9 @@ final readonly class AccountsClient
             $payload['accepted_recovery_reference'] = $acceptedRecoveryReference;
         }
 
-        $response = $this->request()
+        $response = $this->send(fn (PendingRequest $request): Response => $request
             ->withHeader('X-Zahir-Current-Account', $currentAccountId)
-            ->delete("/api/v1/accounts/{$currentAccountId}/identities", $payload)
-            ->throw();
+            ->delete("/api/v1/accounts/{$currentAccountId}/identities", $payload));
 
         return new IdentityUnlinkResult(
             accountId: $this->string($response, 'account_id'),
@@ -115,9 +109,10 @@ final readonly class AccountsClient
 
     private function lifecycle(string $accountId, string $reason, bool $suspend): AccountReference
     {
-        $request = $this->request();
         $url = "/api/v1/accounts/{$accountId}/suspension";
-        $response = ($suspend ? $request->post($url, ['reason' => $reason]) : $request->delete($url, ['reason' => $reason]))->throw();
+        $response = $this->send(fn (PendingRequest $request): Response => $suspend
+            ? $request->post($url, ['reason' => $reason])
+            : $request->delete($url, ['reason' => $reason]));
 
         return new AccountReference(
             id: $this->string($response, 'account.id'),
@@ -126,7 +121,38 @@ final readonly class AccountsClient
         );
     }
 
-    private function request(): \Illuminate\Http\Client\PendingRequest
+    /**
+     * Issue one authenticated call and turn transport reality into the two
+     * answers a consumer can actually act on.
+     *
+     * The split matters more than it looks: "Zahir is down" must never reach a
+     * product as "you have no access". A 5xx, a timeout, and a throttle are all
+     * "ask again later"; only a deliberate 4xx is a refusal.
+     *
+     * @param  callable(PendingRequest): Response  $call
+     */
+    private function send(callable $call): Response
+    {
+        try {
+            $response = $call($this->request());
+        } catch (ConnectionException $exception) {
+            throw new ZahirUnavailable('Zahir could not be reached.', 0, $exception);
+        }
+
+        if ($response->successful()) {
+            return $response;
+        }
+
+        $status = $response->status();
+
+        if ($status >= 500 || $status === 408 || $status === 429) {
+            throw new ZahirUnavailable("Zahir answered {$status}.");
+        }
+
+        throw new ZahirRejected("Zahir refused the request with {$status}.", $status);
+    }
+
+    private function request(): PendingRequest
     {
         return $this->http
             ->baseUrl($this->baseUrl)

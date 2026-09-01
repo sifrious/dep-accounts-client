@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "04add5909da73f65d5c2fc355f500d4b",
+    "content-hash": "6fa33556308f61dd3528e6d3a197f3a0",
     "packages": [
         {
             "name": "carbonphp/carbon-doctrine-types",
@@ -824,7 +824,7 @@
         },
         {
             "name": "illuminate/contracts",
-            "version": "v13.29.0",
+            "version": "v13.30.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/illuminate/contracts.git",
@@ -1161,16 +1161,16 @@
         },
         {
             "name": "illuminate/support",
-            "version": "v13.29.0",
+            "version": "v13.30.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/illuminate/support.git",
-                "reference": "e034c3ddd544e164c3f5d8baa879798907b96a28"
+                "reference": "4eb770b5997127f54c24e297d1202a6200969f51"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/illuminate/support/zipball/e034c3ddd544e164c3f5d8baa879798907b96a28",
-                "reference": "e034c3ddd544e164c3f5d8baa879798907b96a28",
+                "url": "https://api.github.com/repos/illuminate/support/zipball/4eb770b5997127f54c24e297d1202a6200969f51",
+                "reference": "4eb770b5997127f54c24e297d1202a6200969f51",
                 "shasum": ""
             },
             "require": {
@@ -1236,7 +1236,7 @@
                 "issues": "https://github.com/laravel/framework/issues",
                 "source": "https://github.com/laravel/framework"
             },
-            "time": "2026-08-25T15:03:19+00:00"
+            "time": "2026-08-31T13:53:09+00:00"
         },
         {
             "name": "nesbot/carbon",

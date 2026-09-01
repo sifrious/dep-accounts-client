@@ -7,6 +7,8 @@ use Illuminate\Http\Client\Request;
 use PHPUnit\Framework\TestCase;
 use Sifrious\AccountsClient\AccountsClient;
 use Sifrious\AccountsClient\Data\VerifiedExternal;
+use Sifrious\AccountsClient\Exceptions\ZahirRejected;
+use Sifrious\AccountsClient\Exceptions\ZahirUnavailable;
 
 class AccountsClientTest extends TestCase
 {
@@ -111,5 +113,65 @@ class AccountsClientTest extends TestCase
         self::assertSame('suspended', $suspended->status);
         self::assertSame('active', $active->status);
         $http->assertSentCount(2);
+    }
+
+    /**
+     * @return list<array{int}>
+     */
+    public static function retryableStatuses(): array
+    {
+        return [[500], [502], [503], [504], [408], [429]];
+    }
+
+    /**
+     * A product must be able to tell "ask again later" from "no". Every status
+     * here means the former, and none of them may reach a consumer as a denial.
+     *
+     * @param int $status
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('retryableStatuses')]
+    public function test_transient_failures_surface_as_unavailability(int $status): void
+    {
+        $http = new Factory;
+        $http->fake(['https://accounts.example/*' => $http->response(['message' => 'nope'], $status)]);
+
+        $client = new AccountsClient($http, 'https://accounts.example', 'service-token');
+
+        $this->expectException(ZahirUnavailable::class);
+        $client->entitlement('acc_01test', 'burdgen', 'access');
+    }
+
+    public function test_a_deliberate_refusal_surfaces_separately_and_carries_its_status(): void
+    {
+        $http = new Factory;
+        $http->fake(['https://accounts.example/*' => $http->response(['message' => 'Not Found'], 404)]);
+
+        $client = new AccountsClient($http, 'https://accounts.example', 'service-token');
+
+        try {
+            $client->entitlement('acc_01missing', 'burdgen', 'access');
+            $this->fail('A 404 must be reported as a refusal.');
+        } catch (ZahirRejected $rejected) {
+            $this->assertSame(404, $rejected->status);
+        }
+    }
+
+    /**
+     * The message must stay free of the credential that produced it; a client
+     * exception is routinely logged verbatim.
+     */
+    public function test_a_transport_failure_never_echoes_the_service_token(): void
+    {
+        $http = new Factory;
+        $http->fake(['https://accounts.example/*' => $http->response([], 503)]);
+
+        $client = new AccountsClient($http, 'https://accounts.example', 'super-secret-token');
+
+        try {
+            $client->entitlement('acc_01test', 'burdgen', 'access');
+            $this->fail('Expected unavailability.');
+        } catch (ZahirUnavailable $unavailable) {
+            $this->assertStringNotContainsString('super-secret-token', $unavailable->getMessage());
+        }
     }
 }
