@@ -33,15 +33,27 @@ final class ProductAccessDenied extends RuntimeException
         return $this->outcome === AuthenticationOutcome::ZahirUnavailable;
     }
 
-    public function render(Request $request): JsonResponse
+    /**
+     * A machine-readable body for API-shaped requests, and nothing at all for
+     * anyone else.
+     *
+     * Returning null lets the application's own handler take a browser request
+     * and render its words for this outcome. Answering here unconditionally
+     * would silently win over that handler — Laravel consults an exception's
+     * own render() before the application's registered one — and every consumer
+     * would get a bare 403 while believing it had configured otherwise.
+     */
+    public function render(Request $request): ?JsonResponse
     {
-        $status = $this->isDependencyFailure() ? 503 : 403;
+        if (! $request->expectsJson()) {
+            return null;
+        }
 
         return new JsonResponse([
             'outcome' => $this->outcome->value,
             'message' => $this->isDependencyFailure()
                 ? 'Product access cannot be confirmed right now.'
                 : 'Product access denied.',
-        ], $status);
+        ], $this->isDependencyFailure() ? 503 : 403);
     }
 }

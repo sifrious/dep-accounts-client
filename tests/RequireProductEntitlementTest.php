@@ -67,7 +67,7 @@ final class RequireProductEntitlementTest extends TestCase
         $denial = $this->assertDenied($http, AuthenticationOutcome::ZahirUnavailable);
 
         $this->assertTrue($denial->isDependencyFailure());
-        $this->assertSame(503, $denial->render(Request::create('/app'))->getStatusCode());
+        $this->assertSame(503, $denial->render($this->jsonRequest())?->getStatusCode());
     }
 
     public function test_a_decision_naming_another_product_is_refused(): void
@@ -103,10 +103,30 @@ final class RequireProductEntitlementTest extends TestCase
     public function test_a_refusal_renders_403_and_names_the_stable_outcome(): void
     {
         $denial = new ProductAccessDenied(AuthenticationOutcome::UnauthorizedProduct);
-        $rendered = $denial->render(Request::create('/app'));
+        $rendered = $denial->render($this->jsonRequest());
 
+        $this->assertNotNull($rendered);
         $this->assertSame(403, $rendered->getStatusCode());
         $this->assertStringContainsString('unauthorized_product', (string) $rendered->getContent());
+    }
+
+    /**
+     * A browser request gets nothing from the package, so the application's own
+     * handler can render its words instead of losing to a bare 403.
+     */
+    public function test_a_browser_request_is_left_to_the_application(): void
+    {
+        $denial = new ProductAccessDenied(AuthenticationOutcome::Suspended);
+
+        $this->assertNull($denial->render(Request::create('/app')));
+    }
+
+    private function jsonRequest(): Request
+    {
+        $request = Request::create('/app');
+        $request->headers->set('Accept', 'application/json');
+
+        return $request;
     }
 
     private function assertDenied(Factory $http, AuthenticationOutcome $expected): ProductAccessDenied

@@ -112,10 +112,30 @@ attacker-influencable.
 
 ```php
 $middleware->alias(['zahir.entitlement' => RequireProductEntitlement::class]);
+$middleware->appendToPriorityList(Authenticate::class, RequireProductEntitlement::class);
 ```
+
+The second line is not optional. Laravel re-sorts middleware by its priority
+list at runtime, and `Authenticate` is on that list while this is not — so
+`['auth', 'zahir.entitlement']` on a route group does **not** guarantee that
+order. Without it, a signed-out visitor is refused by the entitlement gate
+before `auth` ever runs, and gets a flat denial instead of being sent to sign in.
 
 Apply it to every authorized route group, not just the sensitive ones — a route
 without it is a route where a revoked grant still works.
+
+## 6a. Render denials for browsers
+
+`ProductAccessDenied` answers API-shaped requests itself and returns nothing for
+anyone else, so the application decides what a person sees:
+
+```php
+$exceptions->render(function (ProductAccessDenied $denied, Request $request) {
+    return $request->expectsJson()
+        ? null
+        : redirect()->route('auth.problem', ['state' => $denied->outcome->value]);
+});
+```
 
 ## 7. Render every outcome
 
@@ -142,6 +162,8 @@ adapter, and run it as your auth release gate.
 - [ ] Login, callback, and logout routes owned by the application
 - [ ] Callback throttled; session regenerated after login
 - [ ] `zahir.entitlement` applied to every authorized route group
+- [ ] Entitlement middleware appended to the priority list after `Authenticate`
+- [ ] Browser rendering registered for `ProductAccessDenied`
 - [ ] All eleven outcomes rendered with distinct copy
 - [ ] Conformance suite passing as the release gate
 - [ ] No provider credential stored on the user or in the session
