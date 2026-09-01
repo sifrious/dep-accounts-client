@@ -26,7 +26,8 @@
           "account": {
             "id": "acc_fixture",
             "status": "active",
-            "created": true
+            "created": true,
+            "contact_email": "fixture@example.test"
           }
         }
       }

@@ -136,6 +136,11 @@ final class FakeZahir
                     'id' => $id,
                     'status' => $this->status[$id],
                     'created' => ! $known,
+                    // Metadata the service derives across linked identities.
+                    // One identity here, so it is simply the asserted claim.
+                    'contact_email' => is_string($external['claims']['email'] ?? null)
+                        ? $external['claims']['email']
+                        : null,
                 ]]);
             },
             self::BASE_URL.'/api/v1/entitlements/decide' => function (Request $request) use ($http) {

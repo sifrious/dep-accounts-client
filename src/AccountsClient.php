@@ -39,6 +39,7 @@ final readonly class AccountsClient
             id: $this->string($response, 'account.id'),
             status: $this->string($response, 'account.status'),
             created: $this->boolean($response, 'account.created'),
+            contactEmail: $this->nullableString($response, 'account.contact_email'),
         );
     }
 
@@ -74,6 +75,7 @@ final readonly class AccountsClient
             id: $this->string($response, 'account.id'),
             status: $this->string($response, 'account.status'),
             created: false,
+            contactEmail: $this->nullableString($response, 'account.contact_email'),
         );
     }
 

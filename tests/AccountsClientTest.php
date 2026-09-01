@@ -18,7 +18,10 @@ class AccountsClientTest extends TestCase
         $http = new Factory;
         $http->fake([
             'https://accounts.example/api/v1/accounts/resolve' => $http->response([
-                'account' => ['id' => 'acc_01test', 'status' => 'active', 'created' => true],
+                'account' => [
+                    'id' => 'acc_01test', 'status' => 'active', 'created' => true,
+                    'contact_email' => 'person@example.test',
+                ],
             ]),
         ]);
 
@@ -34,6 +37,7 @@ class AccountsClientTest extends TestCase
         $this->assertSame('acc_01test', $account->id);
         $this->assertSame('active', $account->status);
         $this->assertTrue($account->created);
+        $this->assertSame('person@example.test', $account->contactEmail);
 
         $http->assertSent(function (Request $request): bool {
             $external = $request->data()['external'] ?? null;
@@ -206,5 +210,50 @@ class AccountsClientTest extends TestCase
 
         $this->expectException(ZahirRejected::class);
         $client->unlinkIdentity('acc_01test', 'workos', 'user_only');
+    }
+
+    /**
+     * The account-level address may differ from the assertion just completed —
+     * an account can hold several identities — so it is read from the response
+     * rather than inferred from the claims the caller happened to send.
+     */
+    public function test_the_contact_address_comes_from_the_account_not_the_assertion(): void
+    {
+        $http = new Factory;
+        $http->fake(['https://accounts.example/api/v1/accounts/resolve' => $http->response([
+            'account' => [
+                'id' => 'acc_01test', 'status' => 'active', 'created' => false,
+                'contact_email' => 'primary@example.test',
+            ],
+        ])]);
+
+        $client = new AccountsClient($http, 'https://accounts.example', 'service-token');
+        $account = $client->resolve(new VerifiedExternal(
+            provider: 'workos',
+            providerSubject: 'user_secondary',
+            claims: ['email' => 'secondary@example.test'],
+            provenance: ['issuer' => 'i', 'audience' => 'a', 'asserted_at' => '2026-08-29T12:00:00Z'],
+            authenticatedAt: '2026-08-29T12:00:00Z',
+        ));
+
+        $this->assertSame('primary@example.test', $account->contactEmail);
+    }
+
+    public function test_an_account_with_no_asserted_address_reports_null(): void
+    {
+        $http = new Factory;
+        $http->fake(['https://accounts.example/api/v1/accounts/resolve' => $http->response([
+            'account' => ['id' => 'acc_01test', 'status' => 'active', 'created' => true, 'contact_email' => null],
+        ])]);
+
+        $client = new AccountsClient($http, 'https://accounts.example', 'service-token');
+
+        $this->assertNull($client->resolve(new VerifiedExternal(
+            provider: 'workos',
+            providerSubject: 'user_silent',
+            claims: [],
+            provenance: ['issuer' => 'i', 'audience' => 'a', 'asserted_at' => '2026-08-29T12:00:00Z'],
+            authenticatedAt: '2026-08-29T12:00:00Z',
+        ))->contactEmail);
     }
 }
