@@ -53,6 +53,13 @@ final readonly class LoginResult
      *
      * Products call this instead of comparing outcomes themselves, so a product
      * cannot accidentally treat a new or unfamiliar outcome as permission.
+     *
+     * The assertions publish what the check already guarantees, so a consumer
+     * that has passed this gate can reach the account and identity directly
+     * instead of writing `?->` against a null case that cannot happen.
+     *
+     * @phpstan-assert-if-true !null $this->account
+     * @phpstan-assert-if-true !null $this->identity
      */
     public function grantsAccess(): bool
     {
