@@ -71,3 +71,36 @@ anything else outright.
 
 Two secrets are deployment configuration and never reach a session, a log, or a
 rendered response: the WorkOS client secret and the Zahir service token.
+
+## Lifecycle and session invalidation
+
+Zahir owns account lifecycle; the product owns its own session. The two meet at
+one place: `RequireProductEntitlement` re-asks on every protected request and
+refuses a decision older than `zahir.entitlement_decision_max_age_seconds`.
+
+That bound is the whole invalidation contract. There is no callback, outbox, or
+push, so a suspension or a revoked grant takes effect within one decision window
+rather than one session lifetime.
+
+| Event | Where it is decided | Outcome |
+|---|---|---|
+| Sign-out | Product route | `logged_out` |
+| Session aged out | Product session config | `session_expired` |
+| Account suspended | Zahir lifecycle | `suspended` |
+| Grant revoked or absent | Zahir entitlement | `unauthorized_product` |
+| Zahir unreachable | Transport | `zahir_unavailable` |
+
+None of these deletes anything. Suspension and revocation end *access*; the
+global account, the local projection, and the product's own domain data all
+survive, so restoring a grant restores the person's history with it.
+
+`session_expired` is produced by the product, not the package: only the product
+knows its own session lifetime. Render it with the same vocabulary as the rest.
+
+### Removing an identity
+
+`unlinkIdentity()` returns an `IdentityUnlinkOutcome`. Repeating an unlink is
+idempotent and lands on `unchanged`. Removing an account's last usable identity
+is refused with `recovery_required` rather than an exception: it is a state to
+offer a way out of, not a fault to report. Every other refusal still raises
+`ZahirRejected`.

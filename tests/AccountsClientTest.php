@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Sifrious\AccountsClient\AccountsClient;
 use Sifrious\AccountsClient\Data\VerifiedExternal;
 use Sifrious\AccountsClient\Exceptions\ZahirRejected;
+use Sifrious\AccountsClient\Outcome\IdentityUnlinkOutcome;
 use Sifrious\AccountsClient\Exceptions\ZahirUnavailable;
 
 class AccountsClientTest extends TestCase
@@ -93,7 +94,7 @@ class AccountsClientTest extends TestCase
         $unlinked = $client->unlinkIdentity('acc_01test', 'future-idp', 'future-subject');
 
         self::assertSame('acc_01test', $linked->id);
-        self::assertSame('unlinked', $unlinked->outcome);
+        self::assertSame(IdentityUnlinkOutcome::Unlinked, $unlinked->outcome);
         $http->assertSent(fn (Request $request): bool => $request->hasHeader('X-Zahir-Current-Account', 'acc_01test'));
     }
 
@@ -173,5 +174,37 @@ class AccountsClientTest extends TestCase
         } catch (ZahirUnavailable $unavailable) {
             $this->assertStringNotContainsString('super-secret-token', $unavailable->getMessage());
         }
+    }
+
+    /**
+     * Refusing to strand an account without a way back in is a recoverable
+     * state, so it arrives as an outcome a product can offer a path out of
+     * rather than an exception it has to guess the meaning of.
+     */
+    public function test_a_last_identity_refusal_arrives_as_a_recovery_outcome(): void
+    {
+        $http = new Factory;
+        $http->fake(['https://accounts.example/*' => $http->response(
+            ['message' => 'Identity unlinking failed.', 'reason' => 'recovery_required'],
+            409,
+        )]);
+
+        $client = new AccountsClient($http, 'https://accounts.example', 'service-token');
+        $result = $client->unlinkIdentity('acc_01test', 'workos', 'user_only');
+
+        $this->assertSame(IdentityUnlinkOutcome::RecoveryRequired, $result->outcome);
+        $this->assertFalse($result->outcome->removedAnIdentity());
+        $this->assertSame('acc_01test', $result->accountId);
+    }
+
+    public function test_any_other_refusal_still_raises(): void
+    {
+        $http = new Factory;
+        $http->fake(['https://accounts.example/*' => $http->response(['message' => 'Nope.'], 403)]);
+
+        $client = new AccountsClient($http, 'https://accounts.example', 'service-token');
+
+        $this->expectException(ZahirRejected::class);
+        $client->unlinkIdentity('acc_01test', 'workos', 'user_only');
     }
 }

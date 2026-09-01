@@ -75,7 +75,9 @@
         "body": {
           "message": "The external.provider field is required.",
           "errors": {
-            "external.provider": ["The external.provider field is required."]
+            "external.provider": [
+              "The external.provider field is required."
+            ]
           }
         }
       }
@@ -101,6 +103,15 @@
         "status": 409,
         "body": {
           "message": "Identity resolution failed."
+        }
+      }
+    },
+    "error.recovery_required": {
+      "response": {
+        "status": 409,
+        "body": {
+          "message": "Identity unlinking failed.",
+          "reason": "recovery_required"
         }
       }
     }

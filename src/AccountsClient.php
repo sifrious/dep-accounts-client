@@ -12,6 +12,7 @@ use Sifrious\AccountsClient\Data\IdentityUnlinkResult;
 use Sifrious\AccountsClient\Data\VerifiedExternal;
 use Sifrious\AccountsClient\Exceptions\ZahirRejected;
 use Sifrious\AccountsClient\Exceptions\ZahirUnavailable;
+use Sifrious\AccountsClient\Outcome\IdentityUnlinkOutcome;
 use UnexpectedValueException;
 
 /**
@@ -87,13 +88,24 @@ final readonly class AccountsClient
             $payload['accepted_recovery_reference'] = $acceptedRecoveryReference;
         }
 
-        $response = $this->send(fn (PendingRequest $request): Response => $request
-            ->withHeader('X-Zahir-Current-Account', $currentAccountId)
-            ->delete("/api/v1/accounts/{$currentAccountId}/identities", $payload));
+        try {
+            $response = $this->send(fn (PendingRequest $request): Response => $request
+                ->withHeader('X-Zahir-Current-Account', $currentAccountId)
+                ->delete("/api/v1/accounts/{$currentAccountId}/identities", $payload));
+        } catch (ZahirRejected $rejected) {
+            // Refusing to strand an account without a way back in is a state to
+            // offer a recovery path for, not a fault to report. Every other
+            // refusal stays an exception.
+            if ($rejected->reason === IdentityUnlinkOutcome::RecoveryRequired->value) {
+                return new IdentityUnlinkResult($currentAccountId, IdentityUnlinkOutcome::RecoveryRequired);
+            }
+
+            throw $rejected;
+        }
 
         return new IdentityUnlinkResult(
             accountId: $this->string($response, 'account_id'),
-            outcome: $this->string($response, 'outcome'),
+            outcome: IdentityUnlinkOutcome::from($this->string($response, 'outcome')),
         );
     }
 
@@ -149,7 +161,13 @@ final readonly class AccountsClient
             throw new ZahirUnavailable("Zahir answered {$status}.");
         }
 
-        throw new ZahirRejected("Zahir refused the request with {$status}.", $status);
+        $reason = $response->json('reason');
+
+        throw new ZahirRejected(
+            "Zahir refused the request with {$status}.",
+            $status,
+            is_string($reason) ? $reason : null,
+        );
     }
 
     private function request(): PendingRequest
